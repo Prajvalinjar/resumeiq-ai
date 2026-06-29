@@ -44,18 +44,18 @@ const rows = [
 
 export default function Comparison() {
   return (
-    <section className="bg-white px-6 py-24 border-b border-slate-200">
+    <section className="bg-transparent px-6 py-24 border-b border-white/[0.04]">
       <div className="max-w-6xl mx-auto">
         
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <span className="inline-flex items-center px-4 py-2 rounded-full bg-purple-100 text-purple-700 text-sm font-medium">
+        <div className="text-center max-w-3xl mx-auto mb-16 space-y-6">
+          <span className="inline-flex items-center px-4 py-2 rounded-full bg-[#8b5cf6]/10 text-violet-400 text-xs font-semibold border border-violet-500/20">
             ⚖️ THE ADVANTAGE
           </span>
-          <h2 className="mt-6 text-4xl md:text-5xl font-bold text-slate-900 tracking-tight">
+          <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">
             Traditional Review vs. ResumeIQ AI
           </h2>
-          <p className="mt-4 text-lg text-slate-600">
+          <p className="text-base sm:text-lg text-slate-400 leading-relaxed">
             Compare how we stack up against traditional manual resume writers and general career platforms.
           </p>
         </div>
@@ -66,15 +66,17 @@ export default function Comparison() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
-          className="overflow-x-auto rounded-3xl border border-slate-200 shadow-xl"
+          className="overflow-x-auto rounded-3xl border border-white/[0.08] shadow-2xl bg-slate-950/20 backdrop-blur-xl"
         >
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="p-6 text-slate-900 font-semibold text-lg w-1/3">Feature</th>
-                <th className="p-6 text-slate-500 font-semibold text-lg">Traditional Review</th>
-                <th className="p-6 text-blue-700 font-semibold text-lg bg-blue-50/50 flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-blue-600" /> ResumeIQ AI
+              <tr className="bg-white/[0.02] border-b border-white/[0.08]">
+                <th className="p-6 text-white font-bold text-base w-1/3">Feature</th>
+                <th className="p-6 text-slate-400 font-semibold text-sm">Traditional Review</th>
+                <th className="p-6 text-cyan-400 font-bold text-base bg-cyan-400/[0.02] border-l border-white/[0.06]">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" /> ResumeIQ AI
+                  </div>
                 </th>
               </tr>
             </thead>
@@ -82,25 +84,27 @@ export default function Comparison() {
               {rows.map((row, idx) => (
                 <tr 
                   key={idx} 
-                  className={`border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors`}
+                  className="border-b border-white/[0.04] last:border-0 hover:bg-white/[0.01] transition-colors"
                 >
-                  <td className="p-6 text-slate-800 font-medium">{row.feature}</td>
+                  <td className="p-6 text-slate-200 font-medium text-sm">{row.feature}</td>
                   
                   {/* Traditional column */}
-                  <td className="p-6 text-slate-600 flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
-                      <X className="w-4 h-4" />
-                    </span>
-                    <span>{row.traditional}</span>
+                  <td className="p-6 text-slate-400 text-sm">
+                    <div className="flex items-center gap-3">
+                      <span className="w-5 h-5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center shrink-0">
+                        <X className="w-3.5 h-3.5" />
+                      </span>
+                      <span>{row.traditional}</span>
+                    </div>
                   </td>
                   
                   {/* ResumeIQ AI column */}
-                  <td className="p-6 text-slate-900 font-medium bg-blue-50/30">
+                  <td className="p-6 text-white text-sm bg-cyan-400/[0.01] border-l border-white/[0.06]">
                     <div className="flex items-center gap-3">
-                      <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                        <Check className="w-4 h-4" />
+                      <span className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                        <Check className="w-3.5 h-3.5" />
                       </span>
-                      <span>{row.resumeiq}</span>
+                      <span className="font-semibold text-slate-200">{row.resumeiq}</span>
                     </div>
                   </td>
                 </tr>

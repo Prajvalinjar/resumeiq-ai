@@ -13,6 +13,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
+import ReportDownloadButton from "@/components/ReportDownloadButton";
 
 const ROLES = [
   "Data Analyst",
@@ -31,6 +32,7 @@ const STAGES = [
   "Generating custom bullet rewrites and final score..."
 ];
 
+
 export default function AnalyzePage() {
   const [file, setFile] = useState<File | null>(null);
   const [targetRole, setTargetRole] = useState("");
@@ -47,7 +49,8 @@ export default function AnalyzePage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<"login" | "signup">("login");
 
-  // Load user data on mount
+
+  // Load user data and config status on mount
   useEffect(() => {
     const fetchUser = async () => {
       if (isSupabaseConfigured && supabase) {
@@ -77,6 +80,7 @@ export default function AnalyzePage() {
         setCredits(storedCredits ? parseInt(storedCredits) : 2);
       }
     };
+
     fetchUser();
   }, []);
 
@@ -196,9 +200,9 @@ export default function AnalyzePage() {
   const handleAnalyze = async () => {
     if (!file || !targetRole) return;
 
-    // Check credits before proceeding (only for limited guests/mock users)
-    const isLimited = !user || user.isGuest || credits <= 0;
-    if (isLimited && credits <= 0) {
+    // Check credits before proceeding (only for guest users — logged-in users always pass)
+    const isGuest = !user || user.isGuest;
+    if (isGuest && credits <= 0) {
       setError("You have 0 credits remaining. Please log in or register a free account to get unlimited access.");
       setAuthModalTab("signup");
       setIsAuthModalOpen(true);
@@ -246,31 +250,11 @@ export default function AnalyzePage() {
         setResult(data);
         setIsAnalyzing(false);
 
-        // 3. Save to database / local storage
+        // 3. Update local state
         if (isSupabaseConfigured && supabase && user && !user.isGuest) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            // Save analysis record to DB
-            await supabase.from("analyses").insert({
-              id: data.id,
-              user_id: session.user.id,
-              file_name: file.name,
-              file_size: file.size,
-              target_role: targetRole,
-              ats_score: data.atsScore,
-              recruiter_readiness: data.recruiterReadiness,
-              data: data
-            });
-
-            // If credits is limited, deduct 1. If not (e.g. simulated pro), keep it.
-            if (credits < 999) {
-              const nextCredits = Math.max(0, credits - 1);
-              await supabase
-                .from("profiles")
-                .update({ credits: nextCredits })
-                .eq("id", session.user.id);
-              setCredits(nextCredits);
-            }
+          // Data is already saved to the database securely via the API route
+          if (credits < 999) {
+            setCredits((prev) => Math.max(0, prev - 1));
           }
         } else {
           // Fallback Local Storage Mode
@@ -300,8 +284,16 @@ export default function AnalyzePage() {
     <>
       <Navbar />
 
-      <main className="min-h-screen bg-slate-50/50 py-16 px-6">
-        <div className="max-w-7xl mx-auto">
+      <main className="min-h-screen bg-transparent py-16 px-6 relative overflow-hidden">
+        
+        {/* Background Ambient Orbs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#6366f1]/5 rounded-full blur-[120px] -z-10 animate-orb-1" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[450px] h-[450px] bg-cyan-500/5 rounded-full blur-[130px] -z-10 animate-orb-2" />
+        
+        {/* Grid overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff02_1px,transparent_1px),linear-gradient(to_bottom,#ffffff02_1px,transparent_1px)] bg-[size:32px_32px] -z-10" />
+
+        <div className="max-w-7xl mx-auto relative z-10">
 
           <AnimatePresence mode="wait">
 
@@ -313,16 +305,20 @@ export default function AnalyzePage() {
                 exit={{ opacity: 0, y: -15 }}
                 className="max-w-3xl mx-auto"
               >
-                <div className="text-center mb-10">
-                  <h1 className="text-4xl font-extrabold text-slate-900 leading-tight">
+                <div className="text-center mb-10 space-y-4">
+                  <span className="inline-flex items-center px-4 py-2 rounded-full bg-[#6366f1]/10 text-cyan-400 text-xs font-semibold border border-[#6366f1]/20">
+                    <Sparkles className="w-3.5 h-3.5 mr-1 text-cyan-400" /> RESUME SCRUBBER
+                  </span>
+                  <h1 className="text-4xl font-extrabold text-white leading-tight tracking-tight">
                     Optimize Your Resume
                   </h1>
-                  <p className="mt-3 text-slate-600 text-lg">
+                  <p className="text-slate-400 text-base max-w-xl mx-auto">
                     Upload your PDF and select a target role. We will test it against ATS parsers and suggest structural rewrites.
                   </p>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-xl">
+                <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-8 shadow-2xl glow-border">
+                  
                   {/* Drag and drop card */}
                   {!file ? (
                     <div
@@ -330,10 +326,11 @@ export default function AnalyzePage() {
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
                       onClick={() => fileInputRef.current?.click()}
-                      className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-300 ${isDragOver
-                          ? "border-blue-500 bg-blue-50/40"
-                          : "border-slate-300 hover:border-blue-400 bg-slate-50/30"
-                        }`}
+                      className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-300 relative overflow-hidden ${
+                        isDragOver
+                          ? "border-[#6366f1] bg-[#6366f1]/5 shadow-[0_0_20px_rgba(99,102,241,0.15)]"
+                          : "border-white/10 hover:border-indigo-500/50 bg-white/[0.01]"
+                      }`}
                     >
                       <input
                         type="file"
@@ -342,34 +339,34 @@ export default function AnalyzePage() {
                         onChange={handleFileChange}
                         className="hidden"
                       />
-                      <div className="w-16 h-16 rounded-2xl bg-blue-100/70 text-blue-600 flex items-center justify-center mx-auto mb-4">
-                        <Upload className="w-8 h-8" />
+                      <div className="w-16 h-16 rounded-2xl bg-white/[0.04] text-cyan-400 flex items-center justify-center mx-auto mb-4 border border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.05)]">
+                        <Upload className="w-8 h-8 animate-pulse" />
                       </div>
-                      <h3 className="text-lg font-bold text-slate-800">
+                      <h3 className="text-lg font-bold text-white tracking-tight">
                         Drag and drop your PDF resume
                       </h3>
-                      <p className="text-sm text-slate-500 mt-1">
+                      <p className="text-xs text-slate-400 mt-2">
                         or click to browse local files (PDF only, max 5MB)
                       </p>
                     </div>
                   ) : (
                     // Uploaded File Info
-                    <div className="border border-green-200 bg-green-50/40 rounded-2xl p-6 flex items-center justify-between">
+                    <div className="border border-emerald-500/20 bg-emerald-500/5 rounded-2xl p-6 flex items-center justify-between shadow-[0_0_15px_rgba(16,185,129,0.05)]">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-green-100 text-green-700 rounded-xl flex items-center justify-center shrink-0">
+                        <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center shrink-0 border border-emerald-500/20">
                           <FileText className="w-6 h-6" />
                         </div>
                         <div>
-                          <h4 className="font-bold text-slate-800 break-all">{file.name}</h4>
-                          <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
+                          <h4 className="font-bold text-slate-200 break-all text-sm">{file.name}</h4>
+                          <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
                         </div>
                       </div>
                       <button
                         onClick={handleDeleteFile}
-                        className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                         title="Remove file"
                       >
-                        <Trash2 className="w-5 h-5" />
+                        <Trash2 className="w-4.5 h-4.5" />
                       </button>
                     </div>
                   )}
@@ -379,9 +376,9 @@ export default function AnalyzePage() {
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
-                      className="mt-6 pt-6 border-t border-slate-100"
+                      className="mt-6 pt-6 border-t border-white/[0.06]"
                     >
-                      <label className="block text-sm font-bold text-slate-700 mb-2">
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-widest mb-3">
                         Target Role
                       </label>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -390,10 +387,11 @@ export default function AnalyzePage() {
                             key={role}
                             type="button"
                             onClick={() => setTargetRole(role)}
-                            className={`p-3 text-xs font-semibold rounded-xl border text-center transition-all duration-200 ${targetRole === role
-                                ? "border-blue-600 bg-blue-50 text-blue-700 shadow-sm"
-                                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                              }`}
+                            className={`p-3 text-[11px] font-bold rounded-xl border text-center transition-all duration-200 ${
+                              targetRole === role
+                                ? "border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+                                : "border-white/[0.06] bg-white/[0.02] text-slate-300 hover:bg-white/[0.05]"
+                            }`}
                           >
                             {role}
                           </button>
@@ -403,7 +401,7 @@ export default function AnalyzePage() {
                   )}
 
                   {error && (
-                    <div className="mt-4 p-3.5 bg-red-50 border border-red-200 text-red-700 text-sm font-medium rounded-xl flex items-center gap-2">
+                    <div className="mt-4 p-3.5 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold rounded-xl flex items-center gap-2">
                       <ShieldAlert className="w-5 h-5 shrink-0" />
                       <span>{error}</span>
                     </div>
@@ -412,7 +410,7 @@ export default function AnalyzePage() {
                   {file && targetRole && (
                     <button
                       onClick={handleAnalyze}
-                      className="mt-8 w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-2xl transition duration-300 flex items-center justify-center gap-2"
+                      className="mt-8 w-full bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white font-bold py-4 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.25)] hover:shadow-[0_0_20px_rgba(99,102,241,0.5)] hover:scale-[1.01] transition duration-300 flex items-center justify-center gap-2 text-sm"
                     >
                       <Sparkles className="w-5 h-5" /> Analyze Resume Free
                     </button>
@@ -429,39 +427,41 @@ export default function AnalyzePage() {
                 exit={{ opacity: 0 }}
                 className="max-w-md mx-auto text-center py-12"
               >
-                <div className="relative w-28 h-28 mx-auto mb-8">
+                <div className="relative w-28 h-28 mx-auto mb-8 bg-[#0b1120]/40 rounded-full flex items-center justify-center border border-white/5 shadow-2xl">
                   {/* Glowing spinner */}
-                  <div className="absolute inset-0 rounded-full border-4 border-slate-200" />
+                  <div className="absolute inset-0 rounded-full border-4 border-white/[0.02]" />
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                    className="absolute inset-0 rounded-full border-4 border-t-blue-600 border-r-purple-600 border-b-transparent border-l-transparent"
+                    className="absolute inset-0 rounded-full border-4 border-t-cyan-400 border-r-[#6366f1] border-b-transparent border-l-transparent"
                   />
-                  <div className="absolute inset-2 bg-white rounded-full flex items-center justify-center shadow-inner">
-                    <Sparkles className="w-10 h-10 text-blue-600 animate-pulse" />
+                  <div className="absolute inset-2 bg-slate-950 rounded-full flex items-center justify-center shadow-inner">
+                    <Sparkles className="w-10 h-10 text-cyan-400 animate-pulse" />
                   </div>
                 </div>
 
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">Analyzing Resume</h2>
-                <p className="text-slate-500 text-sm">Please wait while the AI parses your experiences.</p>
+                <h2 className="text-2xl font-bold text-white mb-2">Analyzing Resume</h2>
+                <p className="text-slate-400 text-sm">Please wait while the AI parses your experiences.</p>
 
                 {/* Progress Stages List */}
-                <div className="mt-8 space-y-3.5 text-left bg-white border border-slate-200 rounded-3xl p-6 shadow-md">
+                <div className="mt-8 space-y-3.5 text-left bg-slate-950/40 border border-white/[0.08] rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+                  <div className="scanner-line"></div>
                   {STAGES.map((stage, idx) => (
-                    <div key={idx} className="flex items-center gap-3 text-sm">
+                    <div key={idx} className="flex items-center gap-3 text-sm relative z-10">
                       {idx < currentStage ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                       ) : idx === currentStage ? (
-                        <RefreshCw className="w-5 h-5 text-blue-500 animate-spin shrink-0" />
+                        <RefreshCw className="w-5 h-5 text-cyan-400 animate-spin shrink-0" />
                       ) : (
-                        <div className="w-5 h-5 rounded-full border-2 border-slate-200 shrink-0" />
+                        <div className="w-5 h-5 rounded-full border-2 border-white/10 shrink-0" />
                       )}
-                      <span className={`${idx < currentStage
+                      <span className={`${
+                        idx < currentStage
                           ? "text-slate-500 line-through"
                           : idx === currentStage
-                            ? "text-slate-800 font-semibold"
-                            : "text-slate-400"
-                        }`}>
+                            ? "text-white font-bold"
+                            : "text-slate-500"
+                      }`}>
                         {stage}
                       </span>
                     </div>
@@ -478,27 +478,28 @@ export default function AnalyzePage() {
                 className="space-y-8"
               >
                 {/* Report Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl glow-border">
                   <div>
-                    <span className="text-xs font-bold text-blue-600 uppercase tracking-widest bg-blue-50 py-1 px-3 rounded-full">
+                    <span className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-widest bg-cyan-500/10 border border-cyan-500/20 py-1.5 px-4 rounded-full">
                       Analysis Report
                     </span>
-                    <h1 className="text-2xl font-extrabold text-slate-900 mt-2 flex items-center gap-2">
+                    <h1 className="text-2xl font-extrabold text-white mt-3 flex items-center gap-2">
                       {result.targetRole} <span className="text-slate-400 font-medium text-lg">| {result.fileName}</span>
                     </h1>
                   </div>
 
                   <div className="flex flex-wrap gap-3">
+                    <ReportDownloadButton analysis={result} />
                     <button
                       onClick={() => setResult(null)}
-                      className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 transition flex items-center gap-2 text-sm"
+                      className="px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.02] text-slate-300 font-semibold hover:bg-white/[0.06] hover:text-white transition flex items-center gap-2 text-sm shadow-md"
                     >
                       <ArrowLeft className="w-4 h-4" /> Analyze Another
                     </button>
 
                     <button
                       onClick={() => window.location.href = `/dashboard?analysisId=${result.id}`}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold hover:opacity-95 shadow-md flex items-center gap-2 text-sm"
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white font-bold hover:shadow-[0_0_15px_rgba(99,102,241,0.35)] shadow-md flex items-center gap-2 text-sm transition"
                     >
                       <MessageSquare className="w-4 h-4" /> Chat With Career Coach
                     </button>
@@ -511,19 +512,19 @@ export default function AnalyzePage() {
                   {/* Left Column - Scores & Overview */}
                   <div className="space-y-8">
                     {/* ATS Score card */}
-                    <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm text-center relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-bl-full -z-10" />
-                      <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-6">ATS Match Score</h3>
+                    <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-8 shadow-2xl text-center relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-bl-full -z-10 animate-pulse" />
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">ATS Match Score</h3>
 
                       <div className="relative w-40 h-40 mx-auto flex items-center justify-center">
                         {/* Circular progress bar SVG */}
                         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                          <circle cx="50" cy="50" r="40" className="stroke-slate-100" strokeWidth="8" fill="transparent" />
+                          <circle cx="50" cy="50" r="40" className="stroke-white/[0.04]" strokeWidth="8" fill="transparent" />
                           <motion.circle
                             cx="50"
                             cy="50"
                             r="40"
-                            className="stroke-blue-600"
+                            className="stroke-cyan-400"
                             strokeWidth="8"
                             fill="transparent"
                             strokeDasharray={251.2}
@@ -534,60 +535,61 @@ export default function AnalyzePage() {
                           />
                         </svg>
                         <div className="absolute flex flex-col items-center">
-                          <span className="text-4xl font-extrabold text-slate-900">{result.atsScore}%</span>
-                          <span className={`text-xs font-bold mt-1 uppercase ${result.atsScore >= 80
-                              ? "text-green-600"
+                          <span className="text-4xl font-extrabold text-white">{result.atsScore}%</span>
+                          <span className={`text-[10px] font-extrabold mt-1.5 uppercase tracking-wider ${
+                            result.atsScore >= 80
+                              ? "text-emerald-400"
                               : result.atsScore >= 60
-                                ? "text-amber-500"
-                                : "text-red-500"
-                            }`}>
+                                ? "text-amber-400"
+                                : "text-red-400"
+                          }`}>
                             {result.atsScore >= 80 ? "Optimized" : result.atsScore >= 60 ? "Average Match" : "Needs Review"}
                           </span>
                         </div>
                       </div>
 
                       {/* Recruiter readiness score */}
-                      <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center text-left">
+                      <div className="mt-8 pt-6 border-t border-white/[0.06] flex justify-between items-center text-left">
                         <div>
-                          <p className="text-xs text-slate-400 font-bold uppercase">Recruiter Readiness</p>
-                          <p className="text-sm font-semibold text-slate-700 mt-1">Based on content layout & verbs</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Recruiter Readiness</p>
+                          <p className="text-xs text-slate-500 mt-0.5">Based on content layout & verbs</p>
                         </div>
-                        <span className="text-2xl font-bold text-purple-600">{result.recruiterReadiness}%</span>
+                        <span className="text-2xl font-extrabold text-[#8b5cf6] drop-shadow-[0_0_8px_rgba(139,92,246,0.3)]">{result.recruiterReadiness}%</span>
                       </div>
                     </div>
 
                     {/* Strengths Card */}
-                    <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                      <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <Award className="w-5 h-5 text-emerald-600" /> Resume Strengths
+                    <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl">
+                      <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                        <Award className="w-5 h-5 text-emerald-400" /> Resume Strengths
                       </h3>
                       <ul className="space-y-3">
                         {result.strengths.map((str, idx) => (
-                          <li key={idx} className="flex gap-3 text-sm text-slate-700">
-                            <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                          <li key={idx} className="flex gap-3 text-xs sm:text-sm text-slate-300">
+                            <span className="text-emerald-400 font-bold shrink-0">✓</span>
                             <span>{str}</span>
                           </li>
                         ))}
                         {result.strengths.length === 0 && (
-                          <p className="text-slate-400 text-sm italic">No significant strengths detected.</p>
+                          <p className="text-slate-500 text-xs italic">No significant strengths detected.</p>
                         )}
                       </ul>
                     </div>
 
                     {/* Weaknesses Card */}
-                    <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                      <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-amber-500" /> Resume Weaknesses
+                    <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl">
+                      <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-amber-400" /> Resume Weaknesses
                       </h3>
                       <ul className="space-y-3">
                         {result.weaknesses.map((weak, idx) => (
-                          <li key={idx} className="flex gap-3 text-sm text-slate-700">
-                            <span className="text-amber-500 font-bold shrink-0">⚠️</span>
+                          <li key={idx} className="flex gap-3 text-xs sm:text-sm text-slate-300">
+                            <span className="text-amber-400 font-bold shrink-0">⚠️</span>
                             <span>{weak}</span>
                           </li>
                         ))}
                         {result.weaknesses.length === 0 && (
-                          <p className="text-slate-400 text-sm italic">No significant weaknesses detected.</p>
+                          <p className="text-slate-500 text-xs italic">No significant weaknesses detected.</p>
                         )}
                       </ul>
                     </div>
@@ -598,18 +600,18 @@ export default function AnalyzePage() {
                   <div className="lg:col-span-2 space-y-8">
 
                     {/* Missing Skills & Keywords */}
-                    <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                      <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <Compass className="w-5 h-5 text-blue-600" /> Keyword & Skill Gap Analysis
+                    <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl">
+                      <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                        <Compass className="w-5 h-5 text-cyan-400" /> Keyword & Skill Gap Analysis
                       </h3>
 
                       <div className="space-y-6">
                         {/* Missing Skills */}
                         <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase mb-3">Missing Skills</p>
+                          <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">Missing Skills</p>
                           <div className="flex flex-wrap gap-2">
                             {result.missingSkills.map((skill, idx) => (
-                              <span key={idx} className="px-3 py-1.5 rounded-xl bg-red-50 text-red-700 border border-red-100 text-xs font-semibold">
+                              <span key={idx} className="px-3 py-1.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/15 text-xs font-semibold">
                                 + {skill}
                               </span>
                             ))}
@@ -621,10 +623,10 @@ export default function AnalyzePage() {
 
                         {/* Missing Keywords */}
                         <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase mb-3">Missing ATS Keywords</p>
+                          <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">Missing ATS Keywords</p>
                           <div className="flex flex-wrap gap-2">
                             {result.missingKeywords.map((kw, idx) => (
-                              <span key={idx} className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
+                              <span key={idx} className="px-3 py-1.5 rounded-xl bg-white/[0.02] text-slate-300 text-xs font-semibold border border-white/[0.06] hover:bg-white/[0.05]">
                                 {kw}
                               </span>
                             ))}
@@ -637,14 +639,14 @@ export default function AnalyzePage() {
                     </div>
 
                     {/* Suggestions list */}
-                    <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                      <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <Award className="w-5 h-5 text-purple-600" /> AI Suggestions
+                    <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl">
+                      <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                        <Award className="w-5 h-5 text-[#8b5cf6]" /> AI Suggestions
                       </h3>
                       <ul className="space-y-3.5">
                         {result.suggestions.map((sug, idx) => (
-                          <li key={idx} className="text-sm text-slate-700 flex gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0 mt-1.5" />
+                          <li key={idx} className="text-xs sm:text-sm text-slate-300 flex gap-2.5">
+                            <span className="w-2 h-2 rounded-full bg-[#8b5cf6] shrink-0 mt-1.5" />
                             <span>{sug}</span>
                           </li>
                         ))}
@@ -652,30 +654,30 @@ export default function AnalyzePage() {
                     </div>
 
                     {/* Bullet Rewrite Suggestions */}
-                    <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                      <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <Terminal className="w-5 h-5 text-blue-600" /> AI Bullet Point Optimizer
+                    <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl">
+                      <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                        <Terminal className="w-5 h-5 text-cyan-400" /> AI Bullet Point Optimizer
                       </h3>
-                      <p className="text-sm text-slate-500 mb-6">
+                      <p className="text-xs sm:text-sm text-slate-400 mb-6 leading-relaxed">
                         Replace generic bullet descriptions with quantified, high-impact statements tailored for {result.targetRole}.
                       </p>
 
                       <div className="space-y-6">
                         {result.improvedBullets.map((bullet, idx) => (
-                          <div key={idx} className="border border-slate-100 rounded-2xl p-5 bg-slate-50/50 space-y-4">
+                          <div key={idx} className="border border-white/[0.06] bg-slate-950/40 rounded-2xl p-5 space-y-4 shadow-inner">
                             <div>
-                              <p className="text-xs font-bold text-red-500 uppercase">Original bullet point</p>
-                              <p className="text-sm text-slate-600 mt-1 italic font-medium">"{bullet.original}"</p>
+                              <p className="text-[10px] font-extrabold text-red-400 uppercase tracking-widest">Original bullet point</p>
+                              <p className="text-xs sm:text-sm text-slate-400 mt-1.5 italic">"{bullet.original}"</p>
+                            </div>
+                            
+                            <div className="bg-emerald-500/5 border-l-4 border-emerald-500 p-3.5 rounded-r-xl">
+                              <p className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest">ResumeIQ Optimized Rewrite</p>
+                              <p className="text-xs sm:text-sm text-white mt-1.5 font-bold">"{bullet.improved}"</p>
                             </div>
 
-                            <div className="bg-blue-50/40 border-l-4 border-blue-600 p-3 rounded-r-xl">
-                              <p className="text-xs font-bold text-blue-700 uppercase">ResumeIQ Optimized Rewrite</p>
-                              <p className="text-sm text-slate-900 mt-1 font-semibold">"{bullet.improved}"</p>
-                            </div>
-
                             <div>
-                              <p className="text-xs font-bold text-slate-400 uppercase">Why this works</p>
-                              <p className="text-xs text-slate-500 mt-1 leading-relaxed">{bullet.explanation}</p>
+                              <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Why this works</p>
+                              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{bullet.explanation}</p>
                             </div>
                           </div>
                         ))}

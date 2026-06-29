@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeResume } from "@/lib/gemini";
+import { createSupabaseServerClient } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,6 +15,50 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await analyzeResume(text, targetRole, fileName || "resume.pdf", fileSize || 0);
+
+    // Save to database if user is authenticated
+    const supabase = await createSupabaseServerClient();
+    if (supabase) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Decrement credits if limited
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("credits")
+          .eq("id", user.id)
+          .single();
+
+        if (profile && profile.credits > 0 && profile.credits < 999) {
+          await supabase
+            .from("profiles")
+            .update({ credits: profile.credits - 1 })
+            .eq("id", user.id);
+        }
+
+        // Insert analysis
+        console.log("Attempting to save analysis to DB for user:", user.id);
+        const { error: dbError } = await supabase.from("analyses").insert({
+          id: result.id,
+          user_id: user.id,
+          file_name: result.fileName,
+          file_size: result.fileSize,
+          target_role: result.targetRole,
+          ats_score: result.atsScore,
+          recruiter_readiness: result.recruiterReadiness,
+          data: result
+        });
+        
+        if (dbError) {
+          console.error("❌ Database insert error:", dbError);
+        } else {
+          console.log("✅ Analysis successfully saved to DB!");
+        }
+      } else {
+        console.warn("⚠️ No authenticated user found during analysis save.");
+      }
+    } else {
+      console.warn("⚠️ Supabase client could not be initialized.");
+    }
 
     return NextResponse.json(result);
   } catch (error: any) {

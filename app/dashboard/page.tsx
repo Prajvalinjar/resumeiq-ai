@@ -6,13 +6,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   History, Sparkles, TrendingUp, User, MessageSquare, 
   Send, Calendar, ChevronRight, LogOut, LogIn, 
-  Award, AlertCircle, Compass, FileText, CheckCircle2 
+  Award, AlertCircle, Compass, FileText, CheckCircle2,
+  Search, Filter, SortDesc, Download
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { AnalysisResult, ChatMessage } from "@/types/analysis";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
+import ReportDownloadButton from "@/components/ReportDownloadButton";
 
 // Default dummy history to show when user first loads, in case their local history is empty
 const DUMMY_HISTORY: AnalysisResult[] = [
@@ -72,6 +74,7 @@ const DUMMY_HISTORY: AnalysisResult[] = [
   }
 ];
 
+
 function DashboardPageContent() {
   const searchParams = useSearchParams();
   const initialAnalysisId = searchParams.get("analysisId");
@@ -79,6 +82,30 @@ function DashboardPageContent() {
   // State
   const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [selectedAnalysis, setSelectedAnalysis] = useState<AnalysisResult | null>(null);
+  
+  // History Management State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterRole, setFilterRole] = useState("All");
+  const [sortOrder, setSortOrder] = useState<"date_desc" | "date_asc" | "score_desc" | "score_asc">("date_desc");
+
+  // Computed filtered & sorted history
+  const filteredHistory = history.filter(item => {
+    const matchesSearch = item.fileName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          item.targetRole.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesRole = filterRole === "All" || item.targetRole === filterRole;
+    return matchesSearch && matchesRole;
+  }).sort((a, b) => {
+    switch (sortOrder) {
+      case "date_asc": return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      case "score_desc": return b.atsScore - a.atsScore;
+      case "score_asc": return a.atsScore - b.atsScore;
+      case "date_desc":
+      default:
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+  });
+
+  const uniqueRoles = ["All", ...Array.from(new Set(history.map(item => item.targetRole)))];
   
   // Auth state
   const [user, setUser] = useState<{ email: string; isGuest: boolean } | null>(null);
@@ -91,6 +118,7 @@ function DashboardPageContent() {
   const [newMessage, setNewMessage] = useState("");
   const [isCoachTyping, setIsCoachTyping] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+
 
   // Initialize data (Auth, Credits, and Analysis History)
   useEffect(() => {
@@ -282,25 +310,17 @@ function DashboardPageContent() {
       localStorage.setItem(`resumeiq_chat_${selectedAnalysis.id}`, JSON.stringify(updatedMessages));
     }
 
-    // Supabase Save (User Message)
+    // Supabase Save (User Message) - Now handled by secure server API
     let authUserUuid: string | null = null;
     if (isSupabaseConfigured && supabase && user && !user.isGuest) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         authUserUuid = session.user.id;
-        await supabase.from("chat_messages").insert({
-          id: userMsg.id,
-          analysis_id: selectedAnalysis.id,
-          user_id: authUserUuid,
-          role: "user",
-          content: userMsg.content,
-          created_at: userMsg.createdAt
-        });
       }
     }
 
     try {
-      // Call Gemini Coach API
+      // Call Coach API
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -329,17 +349,7 @@ function DashboardPageContent() {
         localStorage.setItem(`resumeiq_chat_${selectedAnalysis.id}`, JSON.stringify(finalMessages));
       }
 
-      // Supabase Save (Coach Response)
-      if (authUserUuid && isSupabaseConfigured && supabase) {
-        await supabase.from("chat_messages").insert({
-          id: coachMsg.id,
-          analysis_id: selectedAnalysis.id,
-          user_id: authUserUuid,
-          role: "assistant",
-          content: coachMsg.content,
-          created_at: coachMsg.createdAt
-        });
-      }
+      // Supabase Save (Coach Response) - Now handled securely by server API
     } catch (err) {
       console.error(err);
       const errMsg: ChatMessage = {
@@ -385,7 +395,7 @@ function DashboardPageContent() {
 
     if (chartData.length < 2) {
       return (
-        <div className="h-32 flex items-center justify-center text-slate-400 text-sm">
+        <div className="h-32 flex items-center justify-center text-slate-500 text-xs">
           📈 Graph requires at least 2 analyses to track progression.
         </div>
       );
@@ -411,15 +421,15 @@ function DashboardPageContent() {
         <svg className="w-full h-full" viewBox={`0 0 ${width} ${height}`}>
           <defs>
             <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.2" />
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
           {/* Grid lines */}
-          <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="#f1f5f9" strokeWidth="1" />
-          <line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} stroke="#f1f5f9" strokeWidth="1" />
-          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#e2e8f0" strokeWidth="1.5" />
+          <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+          <line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="rgba(255,255,255,0.08)" strokeWidth="1.5" />
 
           {/* Fill under line */}
           <polygon points={fillPoints} fill="url(#chartGradient)" />
@@ -427,11 +437,11 @@ function DashboardPageContent() {
           {/* Line */}
           <polyline
             fill="none"
-            stroke="url(#lineGradient)"
-            strokeWidth="3.5"
+            stroke="#06b6d4"
+            strokeWidth="3"
             points={polylinePoints}
             strokeLinecap="round"
-            className="stroke-blue-600"
+            className="stroke-cyan-400 drop-shadow-[0_0_6px_rgba(6,182,212,0.4)]"
           />
 
           {/* Interactive Dots */}
@@ -440,17 +450,17 @@ function DashboardPageContent() {
               <circle
                 cx={p.x}
                 cy={p.y}
-                r="6"
-                className="fill-blue-600 stroke-white cursor-pointer"
-                strokeWidth="2"
+                r="5"
+                className="fill-cyan-400 stroke-slate-950 cursor-pointer hover:scale-125 transition-transform"
+                strokeWidth="2.5"
               />
               <text
                 x={p.x}
                 y={p.y - 12}
                 textAnchor="middle"
-                fontSize="11"
+                fontSize="10"
                 fontWeight="700"
-                className="fill-slate-700"
+                className="fill-white"
               >
                 {p.score}%
               </text>
@@ -458,9 +468,9 @@ function DashboardPageContent() {
                 x={p.x}
                 y={height - 12}
                 textAnchor="middle"
-                fontSize="9"
-                fontWeight="500"
-                className="fill-slate-400"
+                fontSize="8"
+                fontWeight="600"
+                className="fill-slate-500"
               >
                 {idx + 1}
               </text>
@@ -475,30 +485,38 @@ function DashboardPageContent() {
     <>
       <Navbar />
 
-      <main className="min-h-screen bg-slate-50/50 py-12 px-6">
-        <div className="max-w-7xl mx-auto space-y-8">
+      <main className="min-h-screen bg-transparent pt-24 pb-12 px-6 relative overflow-hidden">
+        
+        {/* Background Ambient Orbs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#6366f1]/5 rounded-full blur-[120px] -z-10 animate-orb-1" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[450px] h-[450px] bg-[#8b5cf6]/5 rounded-full blur-[130px] -z-10 animate-orb-2" />
+        
+        {/* Grid overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff02_1px,transparent_1px),linear-gradient(to_bottom,#ffffff02_1px,transparent_1px)] bg-[size:32px_32px] -z-10" />
+
+        <div className="max-w-7xl mx-auto space-y-8 relative z-10">
           
           {/* Header Panel */}
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl glow-border">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600">
-                <User className="w-6 h-6" />
+              <div className="w-12 h-12 bg-white/[0.04] rounded-2xl flex items-center justify-center text-cyan-400 border border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.05)]">
+                <User className="w-5 h-5 animate-pulse" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-slate-800">
+                <h1 className="text-lg font-bold text-white tracking-tight">
                   Welcome back, {user?.isGuest ? "Guest User" : user?.email.split("@")[0]}!
                 </h1>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <div className="mt-1 flex items-center">
                   {user?.isGuest ? (
-                    <span className="text-amber-600 font-semibold flex items-center gap-1">
+                    <span className="text-[10px] px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 font-extrabold rounded-full uppercase tracking-wider">
                       ⚠️ Limited Account • Credits: {credits}/2 remaining
                     </span>
                   ) : (
-                    <span className="text-green-600 font-semibold flex items-center gap-1">
+                    <span className="text-[10px] px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-extrabold rounded-full uppercase tracking-wider">
                       ✓ Pro Account • Unlimited Analyses
                     </span>
                   )}
-                </p>
+                </div>
               </div>
             </div>
 
@@ -506,14 +524,14 @@ function DashboardPageContent() {
               {user?.isGuest ? (
                 <button
                   onClick={handleLogIn}
-                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold shadow hover:shadow-md hover:scale-[1.02] transition flex items-center gap-2 text-sm"
+                  className="px-5 py-2.5 bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white rounded-xl font-bold shadow-[0_0_15px_rgba(99,102,241,0.25)] hover:shadow-[0_0_20px_rgba(99,102,241,0.5)] hover:scale-[1.01] transition flex items-center gap-2 text-xs"
                 >
                   <LogIn className="w-4 h-4" /> Sign In / Sign Up
                 </button>
               ) : (
                 <button
                   onClick={handleLogOut}
-                  className="px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl font-semibold transition flex items-center gap-2 text-sm"
+                  className="px-5 py-2.5 border border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/[0.06] hover:text-white rounded-xl font-bold transition flex items-center gap-2 text-xs"
                 >
                   <LogOut className="w-4 h-4" /> Log Out
                 </button>
@@ -526,47 +544,91 @@ function DashboardPageContent() {
             
             {/* Column 1: History Sidebar */}
             <div className="lg:col-span-1 space-y-6">
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col h-[650px] overflow-hidden">
-                <div className="flex items-center gap-2 text-slate-800 font-bold border-b border-slate-100 pb-4 mb-4">
-                  <History className="w-5 h-5 text-slate-600" />
-                  <span>Resume History</span>
+              <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl flex flex-col h-[650px] overflow-hidden">
+                <div className="flex items-center justify-between gap-2 text-white font-extrabold border-b border-white/[0.06] pb-4 mb-4 text-sm tracking-wide">
+                  <div className="flex items-center gap-2">
+                    <History className="w-4.5 h-4.5 text-slate-400" />
+                    <span>Resume History</span>
+                  </div>
+                  <span className="bg-white/10 text-white text-[10px] px-2 py-0.5 rounded-full">{filteredHistory.length}</span>
+                </div>
+
+                <div className="space-y-3 mb-4">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Search by role or file..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-slate-950/40 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
+                    />
+                  </div>
+                  
+                  {/* Filter & Sort */}
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                      <select
+                        value={filterRole}
+                        onChange={(e) => setFilterRole(e.target.value)}
+                        className="w-full bg-slate-950/40 border border-white/10 rounded-xl pl-8 pr-3 py-2 text-[10px] text-white appearance-none focus:outline-none focus:border-cyan-500/50"
+                      >
+                        {uniqueRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div className="relative flex-1">
+                      <SortDesc className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                      <select
+                        value={sortOrder}
+                        onChange={(e: any) => setSortOrder(e.target.value)}
+                        className="w-full bg-slate-950/40 border border-white/10 rounded-xl pl-8 pr-3 py-2 text-[10px] text-white appearance-none focus:outline-none focus:border-cyan-500/50"
+                      >
+                        <option value="date_desc">Newest First</option>
+                        <option value="date_asc">Oldest First</option>
+                        <option value="score_desc">Highest Score</option>
+                        <option value="score_asc">Lowest Score</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                  {history.map((item) => (
+                  {filteredHistory.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => setSelectedAnalysis(item)}
                       className={`w-full text-left p-4 rounded-2xl border transition-all ${
                         selectedAnalysis?.id === item.id
-                          ? "border-blue-500 bg-blue-50/40 shadow-sm"
-                          : "border-slate-100 bg-white hover:border-slate-200"
+                          ? "border-cyan-500 bg-cyan-500/5 shadow-[0_0_12px_rgba(6,182,212,0.1)]"
+                          : "border-white/[0.04] bg-white/[0.01] hover:border-white/[0.08] hover:bg-white/[0.02]"
                       }`}
                     >
                       <div className="flex justify-between items-start gap-1">
-                        <span className="font-bold text-slate-800 text-sm truncate w-[70%]">
+                        <span className="font-bold text-white text-xs truncate w-[70%]">
                           {item.targetRole}
                         </span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-bold uppercase shrink-0 ${
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase shrink-0 ${
                           item.atsScore >= 80 
-                            ? "bg-green-50 text-green-700" 
+                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" 
                             : item.atsScore >= 60 
-                              ? "bg-amber-50 text-amber-600" 
-                              : "bg-red-50 text-red-500"
+                              ? "bg-amber-500/10 border border-amber-500/20 text-amber-400" 
+                              : "bg-red-500/10 border border-red-500/20 text-red-400"
                         }`}>
                           {item.atsScore}%
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 mt-1 truncate">{item.fileName}</p>
-                      <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1 font-medium">
-                        <Calendar className="w-3 h-3" />
+                      <p className="text-[10px] text-slate-400 mt-1 truncate">{item.fileName}</p>
+                      <p className="text-[9px] text-slate-500 mt-2.5 flex items-center gap-1 font-semibold">
+                        <Calendar className="w-3 h-3 text-slate-500" />
                         {new Date(item.createdAt).toLocaleDateString()}
                       </p>
                     </button>
                   ))}
                   
-                  {history.length === 0 && (
-                    <div className="text-center py-12 text-slate-400 text-sm">
+                  {filteredHistory.length === 0 && (
+                    <div className="text-center py-12 text-slate-500 text-xs italic">
                       No analyses found.
                     </div>
                   )}
@@ -579,61 +641,64 @@ function DashboardPageContent() {
               {selectedAnalysis ? (
                 <>
                   {/* Performance charts */}
-                  <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-                    <div className="flex items-center gap-2 text-slate-800 font-bold mb-4">
-                      <TrendingUp className="w-5 h-5 text-blue-600" />
+                  <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-6 shadow-2xl">
+                    <div className="flex items-center gap-2 text-white font-extrabold mb-4 text-sm tracking-wide">
+                      <TrendingUp className="w-4.5 h-4.5 text-cyan-400" />
                       <span>ATS Improvement Tracking</span>
                     </div>
                     {renderATSChart()}
                   </div>
 
                   {/* Selected Item Breakdown details */}
-                  <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm space-y-6">
-                    <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                  <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-8 shadow-2xl space-y-6">
+                    <div className="flex justify-between items-center border-b border-white/[0.06] pb-4">
                       <div>
-                        <h2 className="text-xl font-bold text-slate-900">{selectedAnalysis.targetRole}</h2>
-                        <p className="text-xs text-slate-500 mt-0.5">{selectedAnalysis.fileName}</p>
+                        <h2 className="text-lg font-bold text-white tracking-tight">{selectedAnalysis.targetRole}</h2>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{selectedAnalysis.fileName}</p>
                       </div>
-                      <span className="text-4xl font-extrabold text-blue-600">{selectedAnalysis.atsScore}%</span>
+                      <div className="flex flex-col items-end gap-3">
+                        <span className="text-4xl font-extrabold text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.3)]">{selectedAnalysis.atsScore}%</span>
+                        <ReportDownloadButton analysis={selectedAnalysis} />
+                      </div>
                     </div>
 
                     {/* Skill Gap Analysis list */}
                     <div>
-                      <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-1.5">
-                        <Compass className="w-4 h-4 text-purple-600" /> Missing Skills (Gap)
+                      <h4 className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5 uppercase tracking-widest">
+                        <Compass className="w-4 h-4 text-purple-400" /> Missing Skills (Gap)
                       </h4>
                       <div className="flex flex-wrap gap-2">
                         {selectedAnalysis.missingSkills.map((skill, idx) => (
-                          <span key={idx} className="px-3 py-1.5 rounded-xl bg-red-50 text-red-700 border border-red-100 text-xs font-semibold">
+                          <span key={idx} className="px-3 py-1.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/15 text-xs font-bold">
                             + {skill}
                           </span>
                         ))}
                         {selectedAnalysis.missingSkills.length === 0 && (
-                          <span className="text-xs text-slate-400 italic">No missing skills. Perfect match!</span>
+                          <span className="text-xs text-slate-500 italic">No missing skills. Perfect match!</span>
                         )}
                       </div>
                     </div>
 
                     {/* Strengths & Weaknesses quick preview */}
                     <div className="grid md:grid-cols-2 gap-4 pt-2">
-                      <div className="p-4 bg-emerald-50/20 border border-emerald-100 rounded-2xl">
-                        <h4 className="text-xs font-bold text-emerald-800 uppercase mb-2">Strengths</h4>
-                        <ul className="space-y-1.5">
+                      <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
+                        <h4 className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest mb-3">Strengths</h4>
+                        <ul className="space-y-2">
                           {selectedAnalysis.strengths.slice(0, 3).map((str, idx) => (
-                            <li key={idx} className="text-xs text-slate-700 flex gap-1">
-                              <span className="text-emerald-500 font-bold">✓</span>
+                            <li key={idx} className="text-xs text-slate-300 flex gap-2">
+                              <span className="text-emerald-400 font-bold">✓</span>
                               <span className="truncate">{str}</span>
                             </li>
                           ))}
                         </ul>
                       </div>
 
-                      <div className="p-4 bg-amber-50/20 border border-amber-100 rounded-2xl">
-                        <h4 className="text-xs font-bold text-amber-800 uppercase mb-2">Weaknesses</h4>
-                        <ul className="space-y-1.5">
+                      <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
+                        <h4 className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest mb-3">Weaknesses</h4>
+                        <ul className="space-y-2">
                           {selectedAnalysis.weaknesses.slice(0, 3).map((weak, idx) => (
-                            <li key={idx} className="text-xs text-slate-700 flex gap-1">
-                              <span className="text-amber-500 font-bold">⚠️</span>
+                            <li key={idx} className="text-xs text-slate-300 flex gap-2">
+                              <span className="text-amber-400 font-bold">⚠️</span>
                               <span className="truncate">{weak}</span>
                             </li>
                           ))}
@@ -643,16 +708,16 @@ function DashboardPageContent() {
 
                     {/* Bullet rewrites */}
                     {selectedAnalysis.improvedBullets && selectedAnalysis.improvedBullets.length > 0 && (
-                      <div className="pt-4 border-t border-slate-100">
-                        <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-1.5">
-                          <Award className="w-4 h-4 text-blue-600" /> Suggested Rewrite Preview
+                      <div className="pt-4 border-t border-white/[0.06]">
+                        <h4 className="text-xs font-bold text-slate-300 mb-3 flex items-center gap-1.5 uppercase tracking-widest">
+                          <Award className="w-4 h-4 text-cyan-400" /> Suggested Rewrite Preview
                         </h4>
-                        <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50/40">
-                          <p className="text-[10px] font-bold text-red-500 uppercase">Original</p>
-                          <p className="text-xs text-slate-500 mt-0.5 italic">"{selectedAnalysis.improvedBullets[0].original}"</p>
+                        <div className="border border-white/[0.06] rounded-2xl p-4 bg-slate-950/40">
+                          <p className="text-[9px] font-extrabold text-red-400 uppercase tracking-widest">Original</p>
+                          <p className="text-xs text-slate-400 mt-1 italic">"{selectedAnalysis.improvedBullets[0].original}"</p>
                           
-                          <p className="text-[10px] font-bold text-blue-600 uppercase mt-3">Optimized</p>
-                          <p className="text-xs text-slate-900 mt-0.5 font-bold">"{selectedAnalysis.improvedBullets[0].improved}"</p>
+                          <p className="text-[9px] font-extrabold text-emerald-400 uppercase tracking-widest mt-3.5">Optimized</p>
+                          <p className="text-xs text-white mt-1 font-bold">"{selectedAnalysis.improvedBullets[0].improved}"</p>
                         </div>
                       </div>
                     )}
@@ -660,7 +725,7 @@ function DashboardPageContent() {
                   </div>
                 </>
               ) : (
-                <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400">
+                <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-12 text-center text-slate-500 italic text-sm">
                   Select a resume from history to view details.
                 </div>
               )}
@@ -668,29 +733,31 @@ function DashboardPageContent() {
 
             {/* Column 4: AI Career Coach Chat Panel */}
             <div className="lg:col-span-1 space-y-6">
-              <div className="bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col h-[650px] overflow-hidden">
+              <div className="bg-[#0b1120]/30 backdrop-blur-xl border border-white/[0.08] rounded-3xl shadow-2xl flex flex-col h-[650px] overflow-hidden glow-border">
                 {/* Coach Header */}
-                <div className="bg-slate-900 text-white p-4 flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center">
-                    <Sparkles className="w-4.5 h-4.5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm">AI Career Coach</h3>
-                    <p className="text-[10px] text-blue-400">Interactive guidance</p>
+                <div className="bg-slate-950/80 border-b border-white/[0.06] text-white p-4 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] flex items-center justify-center shadow-[0_0_12px_rgba(99,102,241,0.25)]">
+                      <Sparkles className="w-4.5 h-4.5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-xs">AI Career Coach</h3>
+                      <p className="text-[10px] text-cyan-400 font-semibold mt-0.5">Interactive guidance</p>
+                    </div>
                   </div>
                 </div>
 
                 {/* Messages Container */}
-                <div className="flex-1 p-4 overflow-y-auto space-y-3.5 bg-slate-50/50">
+                <div className="flex-1 p-4 overflow-y-auto space-y-3.5 bg-slate-950/20">
                   {chatMessages.map((msg) => (
                     <div
                       key={msg.id}
                       className={`flex gap-2 max-w-[90%] ${msg.role === "user" ? "ml-auto flex-row-reverse" : ""}`}
                     >
-                      <div className={`p-3 rounded-2xl text-xs leading-relaxed whitespace-pre-line shadow-sm border ${
+                      <div className={`p-3 rounded-2xl text-[11px] leading-relaxed whitespace-pre-line border shadow-md ${
                         msg.role === "user"
-                          ? "bg-blue-600 border-blue-600 text-white rounded-tr-none"
-                          : "bg-white border-slate-200 text-slate-800 rounded-tl-none"
+                          ? "bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] border-[#6366f1]/20 text-white rounded-tr-none"
+                          : "bg-white/[0.03] border-white/[0.06] text-slate-300 rounded-tl-none"
                       }`}>
                         {msg.content}
                       </div>
@@ -699,10 +766,10 @@ function DashboardPageContent() {
                   
                   {isCoachTyping && (
                     <div className="flex gap-2 max-w-[90%]">
-                      <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
-                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                      <div className="bg-white/[0.03] border border-white/[0.06] p-3 rounded-2xl rounded-tl-none shadow-md flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" />
+                        <span className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce [animation-delay:0.2s]" />
+                        <span className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce [animation-delay:0.4s]" />
                       </div>
                     </div>
                   )}
@@ -711,12 +778,12 @@ function DashboardPageContent() {
 
                 {/* Presets / Action Tips inside chat */}
                 {selectedAnalysis && (
-                  <div className="border-t border-slate-100 p-2 bg-white grid grid-cols-2 gap-1.5">
+                  <div className="border-t border-white/[0.06] p-2 bg-slate-950/40 grid grid-cols-2 gap-1.5">
                     <button
                       onClick={() => {
                         setNewMessage("Suggest project ideas to fix my missing skills.");
                       }}
-                      className="text-[10px] border border-slate-200 hover:bg-slate-50 text-slate-600 p-2 rounded-xl text-left truncate font-semibold"
+                      className="text-[10px] border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] text-slate-300 p-2 rounded-xl text-left truncate font-semibold"
                     >
                       💡 Suggest project ideas
                     </button>
@@ -724,7 +791,7 @@ function DashboardPageContent() {
                       onClick={() => {
                         setNewMessage("How can I improve my ATS score?");
                       }}
-                      className="text-[10px] border border-slate-200 hover:bg-slate-50 text-slate-600 p-2 rounded-xl text-left truncate font-semibold"
+                      className="text-[10px] border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] text-slate-300 p-2 rounded-xl text-left truncate font-semibold"
                     >
                       📈 Boost ATS score
                     </button>
@@ -732,19 +799,19 @@ function DashboardPageContent() {
                 )}
 
                 {/* Input box */}
-                <form onSubmit={handleSendMessage} className="border-t border-slate-200 p-4 bg-white flex items-center gap-2">
+                <form onSubmit={handleSendMessage} className="border-t border-white/[0.06] p-4 bg-slate-950/40 flex items-center gap-2">
                   <input
                     type="text"
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     placeholder={selectedAnalysis ? "Ask the coach..." : "Select a resume first..."}
                     disabled={!selectedAnalysis || isCoachTyping}
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-blue-500 focus:bg-white text-slate-800"
+                    className="flex-1 bg-white/[0.02] border border-white/[0.08] focus:border-cyan-500/50 rounded-xl px-3 py-2.5 text-xs outline-none focus:bg-slate-950/40 text-white placeholder-slate-500"
                   />
                   <button
                     type="submit"
                     disabled={!selectedAnalysis || isCoachTyping}
-                    className="bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 p-2.5 rounded-xl transition shrink-0"
+                    className="bg-[#6366f1] text-white hover:bg-[#8b5cf6] disabled:bg-slate-800 disabled:text-slate-600 p-2.5 rounded-xl transition shrink-0"
                   >
                     <Send className="w-4 h-4" />
                   </button>
@@ -773,8 +840,8 @@ import { Suspense } from "react";
 export default function DashboardPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600" />
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-400" />
       </div>
     }>
       <DashboardPageContent />

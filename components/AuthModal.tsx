@@ -54,9 +54,6 @@ export default function AuthModal({ isOpen, onClose, initialTab = "login" }: Aut
             password,
           });
           if (authError) throw authError;
-          setSuccess(true);
-          setLoading(false);
-          return;
         }
       } else {
         // Mock Auth Fallback Mode
@@ -85,7 +82,11 @@ export default function AuthModal({ isOpen, onClose, initialTab = "login" }: Aut
 
     } catch (err: any) {
       console.error("Auth error:", err);
-      setError(err?.message || "An authentication error occurred.");
+      if (err?.message?.toLowerCase().includes("rate limit")) {
+        setError("You've attempted to sign up too many times. Please wait a bit or try a different email address (e.g. test2@example.com).");
+      } else {
+        setError(err?.message || "An authentication error occurred.");
+      }
     } finally {
       setLoading(false);
     }
@@ -142,8 +143,6 @@ export default function AuthModal({ isOpen, onClose, initialTab = "login" }: Aut
               <p className="mt-2 text-sm text-slate-500">
                 {activeTab === "login"
                   ? "Signing you in..."
-                  : isSupabaseConfigured
-                  ? "Check your email for the confirmation link!"
                   : "Signed up and logged in successfully!"}
               </p>
             </div>
