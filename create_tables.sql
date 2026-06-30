@@ -19,7 +19,7 @@ create policy "Users can view their own analyses"
   using (auth.uid() = user_id);
 
 drop policy if exists "Users can insert their own analyses" on public.analyses;
-create policy "Users can insert their own analyses" 
+create policy "Users can insert their own analyses" !
   on public.analyses for insert 
   with check (auth.uid() = user_id);
 

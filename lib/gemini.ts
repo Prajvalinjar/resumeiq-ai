@@ -268,3 +268,153 @@ What specific section or bullet point would you like me to help you rewrite?`;
     return "I apologize, but I encountered an error. How else can I assist you with your career goals today?";
   }
 }
+
+// Job Description Matching (Phase 9)
+export async function analyzeJobMatch(
+  jobDescription: string,
+  analysisData: any
+): Promise<any> {
+  if (!isGeminiConfigured || !genAI) {
+    console.log("Gemini API key not found. Using mock job match analysis.");
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return generateMockJobMatch(jobDescription, analysisData);
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      generationConfig: { responseMimeType: "application/json" }
+    });
+
+    const resumeContext = analysisData
+      ? `Resume analysis data: Target Role: ${analysisData.targetRole}, ATS Score: ${analysisData.atsScore}%, Strengths: ${(analysisData.strengths || []).join(", ")}, Missing Skills: ${(analysisData.missingSkills || []).join(", ")}`
+      : "No resume data provided.";
+
+    const prompt = `
+      You are an expert recruiter and ATS specialist.
+      Compare this job description against the candidate's resume analysis and provide a match assessment.
+
+      Job Description:
+      """
+      ${jobDescription}
+      """
+
+      ${resumeContext}
+
+      Return your response as a JSON object matching this schema:
+      {
+        "matchPercentage": number, // 0-100 overall match
+        "keywordMatches": [{ "keyword": string, "found": boolean }], // 8-12 important JD keywords and whether they exist in resume
+        "missingSkills": string[], // 3-6 skills from JD missing in resume
+        "recommendations": string[], // 4-6 actionable suggestions to improve match
+        "jdKeywords": string[], // all important keywords extracted from JD
+        "resumeKeywords": string[] // keywords the resume already has
+      }
+
+      Return only valid JSON.
+    `;
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    return JSON.parse(responseText.trim());
+  } catch (error) {
+    console.error("Error in job match analysis:", error);
+    return generateMockJobMatch(jobDescription, analysisData);
+  }
+}
+
+function generateMockJobMatch(jobDescription: string, analysisData: any): any {
+  const jdLower = jobDescription.toLowerCase();
+  const commonKeywords = ["react", "typescript", "node.js", "python", "sql", "docker", "aws", "git", "agile", "rest api", "javascript", "css"];
+  
+  const jdKeywords = commonKeywords.filter(k => jdLower.includes(k.toLowerCase()));
+  const missingSkills = analysisData?.missingSkills || ["Docker", "Kubernetes", "AWS"];
+  const resumeKeywords = commonKeywords.filter(k => !missingSkills.map((s: string) => s.toLowerCase()).includes(k.toLowerCase()));
+
+  const matchPct = Math.min(95, Math.max(25, Math.round(40 + (resumeKeywords.length / Math.max(jdKeywords.length, 1)) * 50)));
+
+  return {
+    matchPercentage: matchPct,
+    keywordMatches: commonKeywords.slice(0, 10).map(k => ({
+      keyword: k,
+      found: resumeKeywords.includes(k)
+    })),
+    missingSkills: missingSkills.slice(0, 5),
+    recommendations: [
+      `Add missing keywords like ${missingSkills.slice(0, 2).join(" and ")} to your technical skills section.`,
+      "Quantify your achievements with metrics (e.g., 'improved performance by 30%').",
+      "Tailor your project descriptions to match the job description terminology.",
+      "Include relevant certifications if you have them."
+    ],
+    jdKeywords,
+    resumeKeywords,
+  };
+}
+
+// AI Resume Assistant (Phase 10)
+export async function chatWithAssistant(
+  messages: ChatMessage[],
+  newMessage: string,
+  reportsContext: any[]
+): Promise<string> {
+  if (!isGeminiConfigured || !genAI) {
+    console.log("Gemini API key not found. Using mock assistant response.");
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    const lowerMsg = newMessage.toLowerCase();
+    if (reportsContext.length > 0) {
+      const latest = reportsContext[0];
+      const data = latest.data || {};
+      if (lowerMsg.includes("improve") || lowerMsg.includes("better")) {
+        return `Based on your latest analysis for **${latest.targetRole}** (ATS Score: ${latest.atsScore}%), here are my top recommendations:\n\n1. **Add missing skills**: ${(data.missingSkills || []).slice(0, 3).join(", ")}\n2. **Quantify achievements**: Add numbers and percentages to your bullet points\n3. **Use action verbs**: Start bullets with words like Architected, Optimized, Implemented\n\nWould you like me to help rewrite specific bullet points?`;
+      }
+      if (lowerMsg.includes("score") || lowerMsg.includes("ats")) {
+        return `Your current ATS Score is **${latest.atsScore}%** for the **${latest.targetRole}** role.\n\nTo boost it:\n- Include these missing keywords: **${(data.missingKeywords || []).join(", ")}**\n- Fix formatting issues: ${(data.formattingIssues || ["Use single-column layout"]).join(", ")}\n- Follow the suggestions in your report`;
+      }
+      if (lowerMsg.includes("skill") || lowerMsg.includes("keyword")) {
+        return `For the **${latest.targetRole}** role, you're missing: **${(data.missingSkills || []).join(", ")}**.\n\nI recommend:\n1. Building a project using at least 2 of these technologies\n2. Taking a relevant certification\n3. Adding these keywords naturally in your experience section`;
+      }
+      if (lowerMsg.includes("job") || lowerMsg.includes("match") || lowerMsg.includes("description")) {
+        return `To better match job descriptions for **${latest.targetRole}**:\n\n1. Use the **Job Match** feature to paste a specific JD and get keyword analysis\n2. Mirror the exact terminology from the job posting\n3. Focus on these areas: ${(data.suggestions || []).slice(0, 2).join("; ")}\n\nWould you like to try the Job Match feature?`;
+      }
+    }
+    
+    return `Hi! I'm your ResumeIQ AI Assistant. I can help you:\n\n• **Improve your resume** — Get personalized tips\n• **Understand your ATS score** — Learn what's affecting it\n• **Add missing skills** — Know what to include\n• **Match job descriptions** — Optimize for specific roles\n\n${reportsContext.length > 0 ? `I have access to your ${reportsContext.length} most recent reports.` : "Upload a resume first to get personalized advice!"}\n\nWhat would you like help with?`;
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const reportsContextStr = reportsContext.length > 0
+      ? reportsContext.map((r, i) => {
+          const d = r.data || {};
+          return `Report ${i + 1}: ${r.fileName} | Role: ${r.targetRole} | ATS: ${r.atsScore}% | Missing: ${(d.missingSkills || []).join(", ")} | Strengths: ${(d.strengths || []).join(", ")}`;
+        }).join("\n")
+      : "No reports available yet.";
+
+    const formattedHistory = messages.map(msg => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }]
+    }));
+
+    const chat = model.startChat({
+      history: [
+        {
+          role: "user",
+          parts: [{ text: `You are the ResumeIQ AI Career Assistant. You help users improve their resumes, understand ATS scores, and prepare for job applications. Here is the user's report history:\n${reportsContextStr}\n\nBe helpful, specific, and actionable in your responses. Use markdown formatting.` }]
+        },
+        {
+          role: "model",
+          parts: [{ text: `Hello! I'm your ResumeIQ AI Assistant. I have access to your resume analysis history and I'm ready to help you optimize your career materials. What would you like to work on?` }]
+        },
+        ...formattedHistory
+      ]
+    });
+
+    const result = await chat.sendMessage(newMessage);
+    return result.response.text();
+  } catch (error) {
+    console.error("Error invoking Gemini Assistant API:", error);
+    return "I apologize, but I encountered an error processing your request. Please try again or ask a different question.";
+  }
+}

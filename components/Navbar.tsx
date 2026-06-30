@@ -10,6 +10,7 @@ import { User, LogOut, ShieldAlert } from "lucide-react";
 interface NavUser {
   email: string;
   isGuest: boolean;
+  isAdmin?: boolean;
 }
 
 export default function Navbar() {
@@ -24,7 +25,18 @@ export default function Navbar() {
       if (isSupabaseConfigured && supabase) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          setUser({ email: session.user.email || "", isGuest: false });
+          // Fetch is_admin
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("is_admin")
+            .eq("id", session.user.id)
+            .single();
+          
+          setUser({
+            email: session.user.email || "",
+            isGuest: false,
+            isAdmin: !!profile?.is_admin
+          });
           return;
         }
       }
@@ -43,9 +55,19 @@ export default function Navbar() {
     // 2. Subscribe to auth changes
     let subscription: any = null;
     if (isSupabaseConfigured && supabase) {
-      const { data } = supabase.auth.onAuthStateChange((event, session) => {
-        if (session?.user) {
-          setUser({ email: session.user.email || "", isGuest: false });
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (session?.user && supabase) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("is_admin")
+            .eq("id", session.user.id)
+            .single();
+
+          setUser({
+            email: session.user.email || "",
+            isGuest: false,
+            isAdmin: !!profile?.is_admin
+          });
         } else {
           // If logged out from Supabase, revert to guest or local storage
           const storedUser = localStorage.getItem("resumeiq_user");
@@ -138,8 +160,9 @@ export default function Navbar() {
             </div>
           </Link>
 
+
           {/* Navigation Links */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-6">
             <Link
               href="/"
               className="text-sm text-slate-300 hover:text-white hover:shadow-[0_0_8px_rgba(255,255,255,0.1)] transition font-medium"
@@ -155,11 +178,54 @@ export default function Navbar() {
             </Link>
 
             <Link
-              href="/dashboard"
+              href="/dashboard/overview"
               className="text-sm text-slate-300 hover:text-white transition font-medium"
             >
               Dashboard
             </Link>
+
+            <Link
+              href="/history"
+              className="text-sm text-slate-300 hover:text-white transition font-medium"
+            >
+              History
+            </Link>
+
+            <Link
+              href="/dashboard/analytics"
+              className="text-sm text-slate-300 hover:text-white transition font-medium"
+            >
+              Analytics
+            </Link>
+
+            {/* More dropdown */}
+            <div className="relative group">
+              <button className="text-sm text-slate-300 hover:text-white transition font-medium flex items-center gap-1">
+                More
+                <svg className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className="absolute top-full right-0 mt-2 w-48 bg-[#0b1120]/95 backdrop-blur-xl border border-white/[0.08] rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 py-2">
+                <Link href="/compare" className="block px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/[0.05] transition">
+                  Compare Resumes
+                </Link>
+                <Link href="/job-match" className="block px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/[0.05] transition">
+                  Job Match
+                </Link>
+                <Link href="/assistant" className="block px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/[0.05] transition">
+                  AI Assistant
+                </Link>
+                {user?.isAdmin && (
+                  <Link href="/admin" className="block px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-white/[0.05] font-bold transition">
+                    Admin Panel
+                  </Link>
+                )}
+                <Link href="/dashboard" className="block px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/[0.05] transition">
+                  Legacy Dashboard
+                </Link>
+              </div>
+            </div>
           </div>
 
           {/* Buttons / User Panel */}

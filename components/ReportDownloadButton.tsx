@@ -97,6 +97,18 @@ export default function ReportDownloadButton({ analysis }: Props) {
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
       pdf.save(`ResumeIQ_Report_${analysis.targetRole.replace(/\s+/g, '_')}.pdf`);
       
+      // Increment download count in the database
+      if (analysis.id) {
+        try {
+          await fetch(`/api/reports/${analysis.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ increment_download: true }),
+          });
+        } catch (dbErr) {
+          console.error("Failed to increment download count:", dbErr);
+        }
+      }
     } catch (error) {
       console.error("Failed to generate PDF", error);
       alert("Failed to generate PDF report.");

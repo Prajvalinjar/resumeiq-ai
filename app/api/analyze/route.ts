@@ -53,6 +53,26 @@ export async function POST(req: NextRequest) {
         } else {
           console.log("✅ Analysis successfully saved to DB!");
         }
+
+        // Also save to resume_reports table (Phase 3)
+        const { error: reportError } = await supabase.from("resume_reports").insert({
+          user_id: user.id,
+          file_name: result.fileName,
+          resume_text: body.text?.substring(0, 10000) || null,
+          ats_score: result.atsScore,
+          strengths: result.strengths,
+          weaknesses: result.weaknesses,
+          missing_keywords: [...(result.missingKeywords || []), ...(result.missingSkills || [])],
+          suggestions: result.suggestions,
+          job_role: result.targetRole,
+          download_count: 0,
+        });
+
+        if (reportError) {
+          console.error("❌ Resume report insert error:", reportError);
+        } else {
+          console.log("✅ Resume report saved to resume_reports!");
+        }
       } else {
         console.warn("⚠️ No authenticated user found during analysis save.");
       }
